@@ -3,51 +3,77 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:8000/api/'; // URL de tu Backend
 
-export const login = async (username, password) => {
-    try {
-        const response = await axios.post(`${API_URL}token/login/`, {
-            username,
-            password,
-        });
-        // Guarda el token para usarlo en futuras peticiones
-        localStorage.setItem('authToken', response.data.auth_token);
-        return true; // Login exitoso
-    } catch (error) {
-        console.error("Login fallido:", error.response ? error.response.data : error.message);
-        return false; // Login fallido
-    }
-};
-
-/**
- * Cierra la sesión de forma segura, invalidando el token en el backend
- * y limpiando el almacenamiento local.
- */
-export const logout = async () => {
-    // 1. Llama al endpoint de logout del backend para invalidar el token.
-    try {
-        // Usamos null como cuerpo de la petición POST, ya que no se envían datos.
-        await axios.post(`${API_URL}token/logout/`, null, getConfig());
-    } catch (error) {
-        // Si hay un error (ej. el token ya expiró o es inválido),
-        // simplemente limpiamos localmente, ya que la meta es cerrar la sesión.
-        console.warn("Error al invalidar token en el backend. Procediendo a cerrar sesión localmente.", error);
-    }
-
-    // 2. Limpia el token de forma local (siempre debe hacerse)
-    localStorage.removeItem('authToken');
+// 🎯 CAMBIO CLAVE: getConfig AHORA ACEPTA EL TOKEN COMO PARÁMETRO
+const getConfig = (token) => {
+    // Si se pasa un token, lo usa. Si no, lee del localStorage (útil para otras funciones)
+    const activeToken = token || localStorage.getItem('authToken'); 
     
-    // Retornamos true (o nada) para que el frontend pueda redirigir al usuario.
-    return true; 
-};
-
-// Función auxiliar para obtener la configuración de headers con el token.
-// Se usa en llamadas que requieren autenticación (como el logout).
-const getConfig = () => {
-    const token = localStorage.getItem('authToken');
+    if (!activeToken) {
+        // Podrías lanzar un error aquí si el token es nulo
+        return {};
+    }
+    
     return {
         headers: {
-            // DRF/Djoser requiere el prefijo 'Token '
-            'Authorization': `Token ${token}`
+            'Authorization': `Token ${activeToken}`
         }
     };
 };
+
+/**
+ * Llama a la API para obtener los datos del usuario actual (el vendedor).
+ * 🎯 AHORA ACEPTA EL TOKEN COMO ARGUMENTO
+ */
+const getMe = async (token) => {
+    // Usamos el token que acabamos de obtener del login
+    const response = await axios.get(`${API_URL}users/me/`, getConfig(token)); 
+    return response.data; 
+};
+
+
+export const login = async (username, password) => {
+    // 1. Ejecuta el login para obtener el token
+    const response = await axios.post(`${API_URL}token/login/`, {
+        username,
+        password,
+    });
+    
+    const token = response.data.auth_token;
+    localStorage.setItem('authToken', token);
+
+    // 2. 🎯 CRÍTICO: Llama a getMe PASANDO EL TOKEN directamente.
+    try {
+        const userData = await getMe(token); 
+        
+        // 3. Guardar el nombre de usuario. 
+        //    Asumimos que Djoser devuelve el campo 'username'.
+        localStorage.setItem('user_username', userData.username);
+        
+        console.log("Nombre de usuario guardado:", userData.username); // Verifica en consola
+        
+    } catch (error) {
+        // Si el /users/me/ falla, logueamos el error pero permitimos continuar.
+        console.error("Error al obtener datos del usuario /users/me/. Verifique que el token esté funcionando y que /users/me/ esté configurado.", error.response ? error.response.data : error.message);
+    }
+    
+    return true; 
+};
+
+/**
+ * Cierra la sesión de forma segura.
+ */
+export const logout = async () => {
+    try {
+        // Aquí no pasamos token porque usa el que está en localStorage, que es el que se quiere invalidar.
+        await axios.post(`${API_URL}token/logout/`, null, getConfig()); 
+    } catch (error) {
+        console.warn("Error al invalidar token en el backend. Procediendo a cerrar sesión localmente.", error);
+    }
+
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user_username'); 
+    
+    return true; 
+};
+
+// ... (exportaciones si las tienes)

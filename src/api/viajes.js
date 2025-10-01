@@ -83,3 +83,27 @@ export const getSalesHistory = async () => {
     return []; 
   }
 };
+
+// Función para obtener el reporte de ventas totales agrupadas por día
+export const getDailySalesReport = async () => {
+    try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}reporte/ventas-por-dias/`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Token ${token}`,
+            },
+        });
+        
+        if (!response.ok) {
+            throw new Error('Error al cargar el reporte de ventas.');
+        }
+
+        const data = await response.json();
+        return data.reporte; // Devuelve la lista de ventas por día
+    } catch (error) {
+        console.error("Error en getDailySalesReport:", error);
+        return []; // Devuelve una lista vacía en caso de error
+    }
+};
